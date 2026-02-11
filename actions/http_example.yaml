@@ -1,0 +1,68 @@
+# HTTP Example Action
+# Demonstrates using the requests library to make HTTP calls
+
+ref: python_example.http_example
+label: "HTTP Example"
+description: "Makes an HTTP GET request to example.com using the requests library"
+enabled: true
+
+# Runner type
+runner_type: python
+
+# Entry point
+entry_point: http_example.py
+
+# Parameter delivery: stdin for secure parameter passing
+parameter_delivery: stdin
+parameter_format: json
+
+# Output format: json (structured data)
+output_format: json
+
+# Action parameters schema
+parameters:
+  type: object
+  properties:
+    url:
+      type: string
+      description: "URL to request (defaults to https://example.com)"
+      default: "https://example.com"
+    method:
+      type: string
+      description: "HTTP method"
+      default: "GET"
+      enum:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+
+# Output schema
+output_schema:
+  type: object
+  properties:
+    status_code:
+      type: integer
+      description: "HTTP response status code"
+    url:
+      type: string
+      description: "URL that was requested"
+    content_length:
+      type: integer
+      description: "Length of the response body in bytes"
+    content_type:
+      type: string
+      description: "Content-Type header from the response"
+    title:
+      type: string
+      description: "Extracted page title (if HTML response)"
+    success:
+      type: boolean
+      description: "Whether the request succeeded (2xx status)"
+
+# Tags for categorization
+tags:
+  - http
+  - python
+  - example
+  - requests
