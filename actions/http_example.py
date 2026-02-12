@@ -3,20 +3,34 @@
 HTTP Example Action - Python Example Pack
 
 Demonstrates using the `requests` library to make an HTTP call to example.com.
-Receives parameters via stdin JSON (through the Python wrapper).
+Receives parameters via stdin as JSON.
 """
 
-import requests
+import json
+import sys
+import urllib.request
 
 
-def run(url="https://example.com", **kwargs):
-    """Fetch a URL and return status and a snippet of the response body."""
-    response = requests.get(url, timeout=10)
+def main():
+    # Read parameters from stdin (JSON format)
+    params = json.loads(sys.stdin.readline())
+    url = params.get("url", "https://example.com")
 
-    return {
-        "status_code": response.status_code,
-        "url": response.url,
-        "content_length": len(response.text),
-        "snippet": response.text[:500],
-        "success": response.ok,
+    req = urllib.request.Request(url)
+    with urllib.request.urlopen(req, timeout=10) as response:
+        text = response.read().decode("utf-8")
+        status_code = response.status
+        final_url = response.url
+
+    result = {
+        "status_code": status_code,
+        "url": final_url,
+        "content_length": len(text),
+        "snippet": text[:500],
+        "success": 200 <= status_code < 400,
     }
+    print(json.dumps(result))
+
+
+if __name__ == "__main__":
+    main()
