@@ -9,6 +9,9 @@ enabled: true
 # Runner type
 runner_type: python
 
+# Minimum Python version required (semver constraint)
+runtime_version: ">=3.9"
+
 # Entry point
 entry_point: http_example.py
 

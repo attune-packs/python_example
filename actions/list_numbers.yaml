@@ -1,9 +1,9 @@
-# Hello Action
-# Simple Python action that returns "Hello, Python"
+# List Numbers Action
+# Returns a list of sequential integers as JSON
 
-ref: python_example.hello
-label: "Hello Python"
-description: "A simple Python action that returns a greeting message"
+ref: python_example.list_numbers
+label: "List Numbers"
+description: "Returns a list of sequential integers starting from a given value"
 enabled: true
 
 # Runner type determines how the action is executed
@@ -13,7 +13,7 @@ runner_type: python
 runtime_version: ">=3.9"
 
 # Entry point is the Python script to execute
-entry_point: hello.py
+entry_point: list_numbers.py
 
 # Parameter delivery: stdin for secure parameter passing
 parameter_delivery: stdin
@@ -24,20 +24,24 @@ output_format: json
 
 # Action parameters schema (flat format with inline required/secret)
 parameters:
-  name:
-    type: string
-    description: "Optional name to include in greeting"
-    default: "Python"
+  n:
+    type: integer
+    description: "How many numbers to generate"
+    default: 10
+  start:
+    type: integer
+    description: "Starting value of the sequence"
+    default: 0
 
 # Output schema (flat format)
 output_schema:
-  message:
-    type: string
-    description: "The greeting message"
+  items:
+    type: array
+    description: "The list of sequential integers"
     required: true
 
 # Tags for categorization
 tags:
   - python
   - example
-  - greeting
+  - utility

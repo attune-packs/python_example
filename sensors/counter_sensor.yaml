@@ -13,6 +13,9 @@ enabled: true
 # Sensor runner type
 runner_type: python
 
+# Minimum Python version required
+runtime_version: ">=3.9"
+
 # Entry point for sensor execution
 entry_point: counter_sensor.py
 
