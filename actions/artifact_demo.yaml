@@ -1,0 +1,68 @@
+# Artifact Demo Action
+# Demonstrates creating file and progress artifacts via the Attune API
+
+ref: python_example.artifact_demo
+label: "Artifact Demo"
+description: "Creates a file artifact and a progress artifact, writing lines and updating progress over multiple iterations"
+enabled: true
+
+# Runner type determines how the action is executed
+runner_type: python
+
+# Minimum Python version required (semver constraint)
+runtime_version: ">=3.9"
+
+# Entry point is the Python script to execute
+entry_point: artifact_demo.py
+
+# Parameter delivery: stdin for secure parameter passing
+parameter_delivery: stdin
+parameter_format: json
+
+# Output format: json (structured data parsing enabled)
+output_format: json
+
+# Action parameters schema (flat format with inline required/secret)
+parameters:
+  iterations:
+    type: integer
+    description: "Number of iterations to run (each adds a log line and 2% progress)"
+    default: 50
+    minimum: 1
+    maximum: 200
+  username:
+    type: string
+    description: "API username for authentication (defaults to ATTUNE_USERNAME env var or test@attune.local)"
+    default: "test@attune.local"
+  password:
+    type: string
+    description: "API password for authentication (defaults to ATTUNE_PASSWORD env var or TestPass123!)"
+    secret: true
+    default: "TestPass123!"
+
+# Output schema (flat format)
+output_schema:
+  file_artifact_id:
+    type: integer
+    description: "ID of the created file artifact"
+    required: true
+  progress_artifact_id:
+    type: integer
+    description: "ID of the created progress artifact"
+    required: true
+  iterations_completed:
+    type: integer
+    description: "Number of iterations completed"
+    required: true
+  success:
+    type: boolean
+    description: "Whether the demo completed successfully"
+    required: true
+
+# Tags for categorization
+tags:
+  - python
+  - example
+  - artifacts
+  - progress
+  - demo
