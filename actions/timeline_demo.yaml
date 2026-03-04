@@ -1,0 +1,71 @@
+# Timeline Demo Workflow Action
+# Action metadata for the timeline_demo workflow definition.
+#
+# The workflow graph (tasks, transitions, variables) lives in the separate
+# workflow file referenced by `workflow_file`. This action YAML controls
+# action-level concerns: ref, label, parameter schema, output schema, tags,
+# and (in future) execution policies.
+#
+# Multiple actions can reference the same workflow file with different
+# parameter schemas or policy configurations.
+
+ref: python_example.timeline_demo
+label: "Timeline DAG Demo"
+description: >
+  A comprehensive demo workflow that exercises every feature of the
+  Workflow Timeline DAG visualizer: parallel branches with different
+  durations, with_items fan-out, failure handling paths, publish
+  directives, retries, timeouts, and custom edge styling.
+enabled: true
+
+# Reference to the workflow definition file (relative to actions/ directory)
+workflow_file: workflows/timeline_demo.yaml
+
+# Action parameters schema (flat format with inline required/secret)
+# These are the inputs exposed when executing this action. They map to
+# the workflow's `parameters` block but are authoritative for the action.
+parameters:
+  item_count:
+    type: integer
+    description: "Number of items to process in the with_items stage (2–20)"
+    default: 5
+  build_duration:
+    type: number
+    description: "Duration of the simulated build step in seconds"
+    default: 6.0
+  lint_duration:
+    type: number
+    description: "Duration of the simulated lint step in seconds"
+    default: 3.0
+  scan_duration:
+    type: number
+    description: "Duration of the simulated security scan in seconds"
+    default: 4.0
+  item_duration:
+    type: number
+    description: "Duration of each with_items work unit in seconds"
+    default: 2.0
+  fail_validation:
+    type: boolean
+    description: "If true, the validate step will intentionally fail to exercise the error path"
+    default: false
+
+# Output schema (flat format)
+output:
+  status:
+    type: string
+    description: "Final workflow status: 'success' or 'failed'"
+  items_processed:
+    type: integer
+    description: "Number of items that were processed"
+  total_duration:
+    type: number
+    description: "Wall-clock duration of the final task in seconds"
+
+# Tags for categorization
+tags:
+  - demo
+  - timeline
+  - workflow
+  - visualization
+  - python

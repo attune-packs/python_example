@@ -4,12 +4,35 @@ Artifact Demo Action - Python Example Pack
 
 Demonstrates creating file and progress artifacts via the Attune API.
 Each iteration:
-  1. Appends a timestamped log line to a file artifact (via version upload)
-  2. Updates a progress artifact by 2%
+  1. Appends a line to an in-memory log
+  2. Updates a progress artifact
   3. Sleeps for 0.5 seconds
 
-The action authenticates to the API using the provided credentials (or defaults)
-and uses ATTUNE_API_URL / ATTUNE_EXEC_ID environment variables set by the worker.
+After all iterations complete, the full log is written directly to the
+shared artifact volume as a **single version** of a file artifact with a
+stable ref (`python_example.artifact_demo.log`).
+
+File-based artifact flow (single API call):
+  1. POST /api/v1/artifacts/ref/{ref}/versions/file — upserts the artifact
+     (creating it if it doesn't exist) and allocates a version number,
+     returning a relative `file_path`
+  2. Write the file to $ATTUNE_ARTIFACTS_DIR/{file_path} on the shared volume
+
+No HTTP upload is needed — the worker and action process share an artifact
+volume, so the action writes directly to disk.
+
+The progress artifact is still per-execution (ephemeral status indicator).
+
+Parameters:
+  iterations  - Number of iterations to run (default: 50)
+  visibility  - Artifact visibility level for file artifacts: "public" or "private"
+                (default: "private"). Public artifacts are viewable by all authenticated
+                users on the platform. Private artifacts are restricted based on their
+                scope/owner fields.
+
+Note: Progress artifacts always use the server default visibility (public), since
+they are informational status indicators that anyone watching an execution should
+be able to see. The visibility parameter only controls file artifacts.
 """
 
 import json
@@ -49,67 +72,51 @@ def api_request(
         raise
 
 
-def multipart_upload(
-    base_url, path, file_bytes, filename, token, content_type="text/plain"
+def allocate_file_version_by_ref(
+    base_url,
+    token,
+    artifact_ref,
+    execution_id=None,
+    visibility=None,
+    content_type="text/plain",
+    name=None,
+    description=None,
 ):
-    """Upload a file via multipart/form-data."""
-    boundary = f"----AttuneArtifact{int(time.time() * 1000)}"
-    body_parts = []
+    """Upsert an artifact by ref and allocate a file-backed version.
 
-    # file field
-    body_parts.append(f"--{boundary}\r\n".encode())
-    body_parts.append(
-        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode()
-    )
-    body_parts.append(f"Content-Type: {content_type}\r\n\r\n".encode())
-    body_parts.append(file_bytes)
-    body_parts.append(b"\r\n")
+    Single API call that creates the artifact if it doesn't exist (or
+    reuses the existing one) and allocates a new version with a file_path.
 
-    # content_type field
-    body_parts.append(f"--{boundary}\r\n".encode())
-    body_parts.append(b'Content-Disposition: form-data; name="content_type"\r\n\r\n')
-    body_parts.append(content_type.encode())
-    body_parts.append(b"\r\n")
-
-    # created_by field
-    body_parts.append(f"--{boundary}\r\n".encode())
-    body_parts.append(b'Content-Disposition: form-data; name="created_by"\r\n\r\n')
-    body_parts.append(b"python_example.artifact_demo")
-    body_parts.append(b"\r\n")
-
-    body_parts.append(f"--{boundary}--\r\n".encode())
-
-    full_body = b"".join(body_parts)
-
-    url = f"{base_url}{path}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": f"multipart/form-data; boundary={boundary}",
-        "Accept": "application/json",
+    Returns:
+        (artifact_id, version_id, file_path) tuple
+    """
+    payload = {
+        "scope": "action",
+        "owner": "python_example.artifact_demo",
+        "type": "file_text",
+        "retention_policy": "versions",
+        "retention_limit": 10,
+        "content_type": content_type,
+        "created_by": "python_example.artifact_demo",
     }
+    if execution_id is not None:
+        payload["execution"] = execution_id
+    if visibility is not None:
+        payload["visibility"] = visibility
+    if name is not None:
+        payload["name"] = name
+    if description is not None:
+        payload["description"] = description
 
-    req = urllib.request.Request(url, data=full_body, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8")), resp.status
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8", errors="replace")
-        print(f"Upload error {e.code} on {path}: {error_body}", file=sys.stderr)
-        raise
-
-
-def login(base_url, username, password):
-    """Authenticate and return a JWT token."""
-    data, _ = api_request(
+    resp, _ = api_request(
         base_url,
-        "/auth/login",
+        f"/api/v1/artifacts/ref/{artifact_ref}/versions/file",
         method="POST",
-        data={
-            "username": username,
-            "password": password,
-        },
+        data=payload,
+        token=token,
     )
-    return data["data"]["access_token"]
+    version_data = resp["data"]
+    return version_data["artifact"], version_data["id"], version_data["file_path"]
 
 
 def create_artifact(
@@ -119,7 +126,7 @@ def create_artifact(
     name,
     artifact_type,
     execution_id,
-    content_type=None,
+    visibility=None,
     description=None,
     data=None,
 ):
@@ -134,9 +141,9 @@ def create_artifact(
         "name": name,
         "execution": execution_id,
     }
-    if content_type:
-        payload["content_type"] = content_type
-    if description:
+    if visibility is not None:
+        payload["visibility"] = visibility
+    if description is not None:
         payload["description"] = description
     if data is not None:
         payload["data"] = data
@@ -165,50 +172,73 @@ def main():
         # Read parameters from stdin (JSON format)
         params = json.loads(sys.stdin.readline())
         iterations = params.get("iterations", 50)
-        username = params.get("username") or os.environ.get(
-            "ATTUNE_USERNAME", "test@attune.local"
-        )
-        password = params.get("password") or os.environ.get(
-            "ATTUNE_PASSWORD", "TestPass123!"
-        )
+        visibility = params.get("visibility", "private")
+
+        # Validate visibility value
+        if visibility not in ("public", "private"):
+            raise ValueError(
+                f"Invalid visibility '{visibility}': must be 'public' or 'private'"
+            )
 
         # Get execution context from environment
-        api_url = os.environ.get("ATTUNE_API_URL", "http://localhost:8080")
+        api_url = os.environ.get("ATTUNE_API_URL", "")
+        token = os.environ.get("ATTUNE_API_TOKEN", "")
         exec_id_str = os.environ.get("ATTUNE_EXEC_ID", "")
+        artifacts_dir = os.environ.get("ATTUNE_ARTIFACTS_DIR", "")
         execution_id = int(exec_id_str) if exec_id_str else None
 
+        if not api_url:
+            raise RuntimeError(
+                "ATTUNE_API_URL environment variable is not set. "
+                "This action must be run by the Attune worker."
+            )
+        if not token:
+            raise RuntimeError(
+                "ATTUNE_API_TOKEN environment variable is not set. "
+                "This action must be run by the Attune worker."
+            )
+        if not artifacts_dir:
+            raise RuntimeError(
+                "ATTUNE_ARTIFACTS_DIR environment variable is not set. "
+                "This action must be run by the Attune worker."
+            )
+
         print(
-            f"Artifact demo starting: {iterations} iterations, API at {api_url}",
+            f"Artifact demo starting: {iterations} iterations, "
+            f"visibility={visibility}, API at {api_url}, "
+            f"artifacts_dir={artifacts_dir}",
             file=sys.stderr,
         )
 
-        # Authenticate
-        token = login(api_url, username, password)
-        print("Authenticated successfully", file=sys.stderr)
+        # ----------------------------------------------------------------
+        # File artifact — single call upserts artifact + allocates version
+        # ----------------------------------------------------------------
+        file_ref = "python_example.artifact_demo.log"
 
-        # Build unique artifact refs using execution ID to avoid collisions
-        ts = int(time.time())
-        ref_suffix = f"{execution_id}_{ts}" if execution_id else str(ts)
-        file_ref = f"python_example.artifact_demo.log.{ref_suffix}"
-        progress_ref = f"python_example.artifact_demo.progress.{ref_suffix}"
-
-        # Create file artifact (file_text type)
-        file_artifact_id = create_artifact(
+        file_artifact_id, version_id, file_path = allocate_file_version_by_ref(
             base_url=api_url,
             token=token,
-            ref=file_ref,
-            name="Artifact Demo Log",
-            artifact_type="file_text",
+            artifact_ref=file_ref,
             execution_id=execution_id,
+            visibility=visibility,
             content_type="text/plain",
-            description=f"Log output from artifact demo ({iterations} iterations)",
+            name="Demo Log",
+            description="Log output from the artifact demo action",
         )
+        full_file_path = os.path.join(artifacts_dir, file_path)
         print(
-            f"Created file artifact ID={file_artifact_id} ref={file_ref}",
+            f"Allocated file artifact ref={file_ref} id={file_artifact_id} "
+            f"version={version_id} path={file_path}",
             file=sys.stderr,
         )
 
-        # Create progress artifact
+        # ----------------------------------------------------------------
+        # Progress artifact — per-execution (ephemeral status indicator)
+        # ----------------------------------------------------------------
+        ts = int(time.time())
+        ref_suffix = f"{execution_id}_{ts}" if execution_id else str(ts)
+        progress_ref = f"python_example.artifact_demo.progress.{ref_suffix}"
+
         progress_artifact_id = create_artifact(
             base_url=api_url,
             token=token,
@@ -220,11 +250,14 @@ def main():
             data=[],  # Initialize with empty array
         )
         print(
-            f"Created progress artifact ID={progress_artifact_id} ref={progress_ref}",
+            f"Created progress artifact ID={progress_artifact_id} ref={progress_ref} "
+            f"visibility=public (server default)",
             file=sys.stderr,
         )
 
-        # Run iterations
+        # ----------------------------------------------------------------
+        # Run iterations — collect log lines, write file at the end
+        # ----------------------------------------------------------------
         log_lines = []
         for i in range(iterations):
             iteration = i + 1
@@ -236,17 +269,6 @@ def main():
             log_lines.append(log_line)
 
             print(f"  Iteration {iteration}/{iterations} ({pct}%)", file=sys.stderr)
-
-            # Upload the full log as a new file version
-            full_log = "\n".join(log_lines) + "\n"
-            multipart_upload(
-                base_url=api_url,
-                path=f"/api/v1/artifacts/{file_artifact_id}/versions/upload",
-                file_bytes=full_log.encode("utf-8"),
-                filename="artifact_demo.log",
-                token=token,
-                content_type="text/plain",
-            )
 
             # Append progress entry
             append_progress(
@@ -266,11 +288,26 @@ def main():
             if iteration < iterations:
                 time.sleep(0.5)
 
+        # ----------------------------------------------------------------
+        # Write the complete log file to the shared artifact volume
+        # ----------------------------------------------------------------
+        full_log = "\n".join(log_lines) + "\n"
+        with open(full_file_path, "w", encoding="utf-8") as f:
+            f.write(full_log)
+        print(
+            f"Wrote {len(full_log)} bytes to {full_file_path}",
+            file=sys.stderr,
+        )
+
         elapsed = round(time.time() - start_time, 3)
         result = {
             "file_artifact_id": file_artifact_id,
+            "file_artifact_ref": file_ref,
+            "file_version_id": version_id,
+            "file_path": file_path,
             "progress_artifact_id": progress_artifact_id,
             "iterations_completed": iterations,
+            "visibility": visibility,
             "elapsed_seconds": elapsed,
             "success": True,
         }

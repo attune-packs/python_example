@@ -1,0 +1,52 @@
+# Flaky Fail Action
+# Randomly fails with a configurable probability, useful for testing error handling and retry logic
+
+ref: python_example.flaky_fail
+label: "Flaky Fail"
+description: "An action that randomly fails with a configurable probability. Useful for testing error handling, retry logic, and workflow failure paths."
+enabled: true
+
+# Runner type determines how the action is executed
+runner_type: python
+
+# Minimum Python version required (semver constraint)
+runtime_version: ">=3.9"
+
+# Entry point is the Python script to execute
+entry_point: flaky_fail.py
+
+# Parameter delivery: stdin for secure parameter passing
+parameter_delivery: stdin
+parameter_format: json
+
+# Output format: json (structured data parsing enabled)
+output_format: json
+
+# Action parameters schema (flat format with inline required/secret)
+parameters:
+  failure_probability:
+    type: number
+    description: "Probability of failure between 0.0 (never fail) and 1.0 (always fail)"
+    default: 0.1
+
+# Output schema (flat format)
+output_schema:
+  succeeded:
+    type: boolean
+    description: "Whether the action succeeded (always true when it doesn't fail)"
+    required: true
+  roll:
+    type: number
+    description: "The random value that was rolled (0.0 to 1.0)"
+    required: true
+  threshold:
+    type: number
+    description: "The failure probability threshold that was used"
+    required: true
+
+# Tags for categorization
+tags:
+  - python
+  - example
+  - testing
+  - error-handling

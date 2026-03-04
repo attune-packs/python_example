@@ -3,7 +3,7 @@
 
 ref: python_example.artifact_demo
 label: "Artifact Demo"
-description: "Creates a file artifact and a progress artifact, writing lines and updating progress over multiple iterations"
+description: "Creates a file artifact (written directly to the shared volume) and a progress artifact, updating progress over multiple iterations"
 enabled: true
 
 # Runner type determines how the action is executed
@@ -26,33 +26,47 @@ output_format: json
 parameters:
   iterations:
     type: integer
-    description: "Number of iterations to run (each adds a log line and 2% progress)"
+    description: "Number of iterations to run (each adds a log line and updates progress)"
     default: 50
     minimum: 1
     maximum: 200
-  username:
+  visibility:
     type: string
-    description: "API username for authentication (defaults to ATTUNE_USERNAME env var or test@attune.local)"
-    default: "test@attune.local"
-  password:
-    type: string
-    description: "API password for authentication (defaults to ATTUNE_PASSWORD env var or TestPass123!)"
-    secret: true
-    default: "TestPass123!"
+    description: "Artifact visibility level: public (all authenticated users) or private (scope/owner restricted)"
+    default: "private"
+    enum:
+      - "public"
+      - "private"
 
 # Output schema (flat format)
 output_schema:
   file_artifact_id:
     type: integer
-    description: "ID of the created file artifact"
+    description: "ID of the file artifact"
+    required: true
+  file_artifact_ref:
+    type: string
+    description: "Stable ref of the file artifact"
+    required: true
+  file_version_id:
+    type: integer
+    description: "ID of the file artifact version created for this execution"
+    required: true
+  file_path:
+    type: string
+    description: "Relative path of the file on the shared artifact volume"
     required: true
   progress_artifact_id:
     type: integer
-    description: "ID of the created progress artifact"
+    description: "ID of the progress artifact"
     required: true
   iterations_completed:
     type: integer
     description: "Number of iterations completed"
+    required: true
+  visibility:
+    type: string
+    description: "Visibility level that was applied to the file artifact"
     required: true
   success:
     type: boolean

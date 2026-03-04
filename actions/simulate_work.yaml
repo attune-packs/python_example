@@ -1,0 +1,76 @@
+# Simulate Work Action
+# Simulates a unit of work with configurable duration and structured output.
+# Useful for testing workflows, the timeline DAG visualizer, and execution monitoring.
+
+ref: python_example.simulate_work
+label: "Simulate Work"
+description: "Simulates a unit of work that takes a configurable amount of time, returning structured JSON with timing info. Supports simulated failures for testing error-handling paths."
+enabled: true
+
+# Runner type determines how the action is executed
+runner_type: python
+
+# Minimum Python version required (semver constraint)
+runtime_version: ">=3.9"
+
+# Entry point is the Python script to execute
+entry_point: simulate_work.py
+
+# Parameter delivery: stdin for secure parameter passing
+parameter_delivery: stdin
+parameter_format: json
+
+# Output format: json (structured data parsing enabled)
+output_format: json
+
+# Action parameters schema (flat format with inline required/secret)
+parameters:
+  duration_seconds:
+    type: number
+    description: "How long to simulate work in seconds (clamped to 0–300)"
+    default: 1.0
+  label:
+    type: string
+    description: "A human-readable label for this work unit"
+    default: "work"
+  fail:
+    type: boolean
+    description: "Whether to simulate a failure (exits non-zero)"
+    default: false
+  fail_after:
+    type: number
+    description: "If failing, wait this many seconds before crashing (0 = immediate)"
+    default: 0
+  output_data:
+    type: object
+    description: "Arbitrary JSON data to pass through to the result"
+
+# Output schema (flat format)
+output_schema:
+  label:
+    type: string
+    description: "The label that was passed in"
+    required: true
+  duration_seconds:
+    type: number
+    description: "Actual elapsed wall-clock time in seconds"
+    required: true
+  requested_seconds:
+    type: number
+    description: "The requested duration"
+    required: true
+  output_data:
+    type: object
+    description: "The pass-through data (if provided)"
+  success:
+    type: boolean
+    description: "Always true on success (failures exit non-zero)"
+    required: true
+
+# Tags for categorization
+tags:
+  - python
+  - example
+  - testing
+  - workflow
+  - simulation

@@ -21,8 +21,18 @@ This pack exercises as many parts of the Attune SDLC as possible:
 | Ref | Description |
 |-----|-------------|
 | `python_example.hello` | Returns `"Hello, Python"` — minimal action |
-| `python_example.http_example` | Uses `requests` to GET `https://example.com` |
+| `python_example.http_example` | Uses `urllib` to GET `https://example.com` |
 | `python_example.read_counter` | Consumes a counter value and returns a formatted message |
+| `python_example.list_numbers` | Returns a list of sequential integers as JSON |
+| `python_example.flaky_fail` | Randomly fails with configurable probability — useful for testing error handling and retry logic |
+| `python_example.simulate_work` | Simulates a unit of work with configurable duration, optional failure, and structured output — useful for testing workflows and the timeline visualizer |
+| `python_example.artifact_demo` | Creates file and progress artifacts via the Attune API, demonstrating the artifact system |
+
+### Workflows
+
+| Ref | Description |
+|-----|-------------|
+| `python_example.timeline_demo` | Comprehensive demo workflow exercising parallel fan-out/fan-in, `with_items` concurrency, failure paths, retries, timeouts, publish directives, and custom edge styling — designed to produce a rich Timeline DAG visualization |
 
 ### Triggers
 
@@ -187,6 +197,49 @@ attune action execute python_example.http_example
 attune action execute python_example.read_counter --param counter=99 --param rule_ref=test
 # Output: {"message": "Counter value is 99 (from rule: test)", ...}
 ```
+
+### Test the simulate_work action
+
+```bash
+attune action execute python_example.simulate_work \
+  --param duration_seconds=2.0 --param label=demo
+# Output: {"label": "demo", "duration_seconds": 2.003, "requested_seconds": 2.0, "success": true}
+
+# Test failure simulation:
+attune action execute python_example.simulate_work \
+  --param fail=true --param label=crash-test
+# Exits non-zero with error on stderr
+```
+
+### Run the Timeline Demo workflow
+
+The `timeline_demo` workflow is designed to produce a visually rich Timeline DAG
+on the execution detail page. It exercises parallel branches, `with_items`
+expansion, failure handling, and custom transition styling.
+
+```bash
+# Happy path (all tasks succeed, ~25s total):
+attune action execute python_example.timeline_demo
+
+# With more items and faster durations:
+attune action execute python_example.timeline_demo \
+  --param item_count=10 --param item_duration=1.0 --param build_duration=4.0
+
+# Exercise the failure/error-handling path:
+attune action execute python_example.timeline_demo \
+  --param fail_validation=true
+
+# Then open the execution detail page in the Web UI to see the Timeline DAG.
+```
+
+**What to look for in the Timeline DAG:**
+
+- **Fan-out** from `initialize` into 3 parallel branches (`build_artifacts`, `run_linter`, `security_scan`) with different durations
+- **Fan-in** at `merge_results` with a `join: 3` barrier — the bar starts only after the slowest branch completes
+- **`with_items` expansion** at `process_items` — each item appears as a separate child execution bar, with `concurrency: 3` controlling how many run simultaneously
+- **Custom edge colors**: indigo for fan-out/merge, green for success, red for failure, orange for timeout/error-handled paths
+- **Custom edge labels**: "fan-out", "build ok", "lint clean", "scan clear", "valid ✓", "invalid ✗", etc.
+- **Failure path** (when `fail_validation=true`): the DAG shows the red edge from `validate` → `handle_failure` → `finalize_failure`
 
 ### Enable the rule to start the counter sensor loop
 

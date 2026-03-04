@@ -1,0 +1,293 @@
+# Timeline Demo Workflow
+# Demonstrates various workflow features and exercises the Timeline DAG visualizer.
+#
+# This is an action-linked workflow file — action-level metadata (ref, label,
+# description, parameters, output, tags) is defined in the companion action
+# YAML at actions/timeline_demo.yaml. This file contains only the execution
+# graph: version, vars, tasks, and output_map.
+#
+# Features exercised:
+#   - Sequential task chains
+#   - Parallel fan-out (3 branches) and fan-in (merge)
+#   - with_items expansion with concurrency limiting
+#   - Failure/error handling paths (succeeded/failed/timed_out transitions)
+#   - Variable-duration tasks for interesting Gantt chart shapes
+#   - Publish directives passing data between tasks
+#   - Custom transition labels and colors via __chart_meta__
+#   - Retry configuration
+#   - Timeout handling
+#
+# Expected timeline shape (approximate):
+#
+#   initialize ─┬─► build_artifacts ──────────────────────┐
+#               ├─► run_linter ──────────┐                ├─► merge_results ─► process_items(×5) ─► validate ─┬─► finalize_success
+#               └─► security_scan ───────┘                │                                                   └─► handle_failure ─► finalize_failure
+#                                        └────────────────┘
+
+version: "1.0.0"
+
+vars:
+  build_result: null
+  lint_result: null
+  scan_result: null
+  merged_summary: null
+  items_processed: 0
+  validation_passed: false
+
+tasks:
+  # ── Stage 1: Initialize ──────────────────────────────────────────────
+  - name: initialize
+    action: python_example.simulate_work
+    input:
+      duration_seconds: 1.0
+      label: "initialize"
+      output_data:
+        item_count: "{{ parameters.item_count }}"
+        started: true
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - item_count: "{{ parameters.item_count }}"
+        do:
+          - build_artifacts
+          - run_linter
+          - security_scan
+        __chart_meta__:
+          label: "fan-out"
+          color: "#6366f1"
+      - when: "{{ failed() }}"
+        do:
+          - finalize_failure
+        __chart_meta__:
+          label: "init failed"
+          color: "#ef4444"
+
+  # ── Stage 2a: Build artifacts (longest parallel branch) ──────────────
+  - name: build_artifacts
+    action: python_example.simulate_work
+    input:
+      duration_seconds: "{{ parameters.build_duration }}"
+      label: "build"
+      output_data:
+        artifact: "app-v1.2.3.tar.gz"
+        size_mb: 48
+    retry:
+      count: 2
+      delay: 1
+      backoff: constant
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - build_result: "{{ result() }}"
+        do:
+          - merge_results
+        __chart_meta__:
+          label: "build ok"
+          color: "#22c55e"
+      - when: "{{ failed() }}"
+        do:
+          - handle_failure
+        __chart_meta__:
+          label: "build failed"
+          color: "#ef4444"
+
+  # ── Stage 2b: Run linter (medium parallel branch) ────────────────────
+  - name: run_linter
+    action: python_example.simulate_work
+    input:
+      duration_seconds: "{{ parameters.lint_duration }}"
+      label: "lint"
+      output_data:
+        warnings: 3
+        errors: 0
+        files_checked: 42
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - lint_result: "{{ result() }}"
+        do:
+          - merge_results
+        __chart_meta__:
+          label: "lint clean"
+          color: "#22c55e"
+      - when: "{{ failed() }}"
+        do:
+          - handle_failure
+        __chart_meta__:
+          label: "lint errors"
+          color: "#ef4444"
+
+  # ── Stage 2c: Security scan (short parallel branch) ──────────────────
+  - name: security_scan
+    action: python_example.simulate_work
+    input:
+      duration_seconds: "{{ parameters.scan_duration }}"
+      label: "security-scan"
+      output_data:
+        vulnerabilities: 0
+        packages_scanned: 128
+    timeout: 30
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - scan_result: "{{ result() }}"
+        do:
+          - merge_results
+        __chart_meta__:
+          label: "scan clear"
+          color: "#22c55e"
+      - when: "{{ failed() }}"
+        do:
+          - handle_failure
+        __chart_meta__:
+          label: "scan failed"
+          color: "#ef4444"
+      - when: "{{ timed_out() }}"
+        do:
+          - handle_failure
+        __chart_meta__:
+          label: "scan timed out"
+          color: "#f97316"
+
+  # ── Stage 3: Merge results (join from 3 parallel branches) ──────────
+  - name: merge_results
+    action: python_example.simulate_work
+    join: 3
+    input:
+      duration_seconds: 1.5
+      label: "merge"
+      output_data:
+        build: "{{ workflow.build_result }}"
+        lint: "{{ workflow.lint_result }}"
+        scan: "{{ workflow.scan_result }}"
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - merged_summary: "{{ result() }}"
+        do:
+          - generate_item_list
+        __chart_meta__:
+          label: "merged"
+          color: "#6366f1"
+
+  # ── Stage 4a: Generate the item list for with_items ──────────────────
+  - name: generate_item_list
+    action: python_example.list_numbers
+    input:
+      n: "{{ parameters.item_count }}"
+      start: 1
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - number_list: "{{ result().data.items }}"
+        do:
+          - process_items
+        __chart_meta__:
+          label: "items ready"
+          color: "#6366f1"
+
+  # ── Stage 4b: Process each item (with_items + concurrency) ──────────
+  - name: process_items
+    action: python_example.simulate_work
+    with_items: "{{ workflow.number_list }}"
+    concurrency: 3
+    input:
+      duration_seconds: "{{ parameters.item_duration }}"
+      label: "item-{{ item }}"
+      output_data:
+        item_number: "{{ item }}"
+        index: "{{ index }}"
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - items_processed: "{{ parameters.item_count }}"
+        do:
+          - validate
+        __chart_meta__:
+          label: "all items done"
+          color: "#22c55e"
+      - when: "{{ failed() }}"
+        do:
+          - handle_failure
+        __chart_meta__:
+          label: "item failed"
+          color: "#ef4444"
+
+  # ── Stage 5: Validate everything ─────────────────────────────────────
+  - name: validate
+    action: python_example.simulate_work
+    input:
+      duration_seconds: 2.0
+      label: "validate"
+      fail: "{{ parameters.fail_validation }}"
+      fail_after: 1.0
+      output_data:
+        checks_passed: 12
+        checks_total: 12
+    retry:
+      count: 1
+      delay: 2
+      backoff: constant
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - validation_passed: true
+        do:
+          - finalize_success
+        __chart_meta__:
+          label: "valid ✓"
+          color: "#22c55e"
+      - when: "{{ failed() }}"
+        publish:
+          - validation_passed: false
+        do:
+          - handle_failure
+        __chart_meta__:
+          label: "invalid ✗"
+          color: "#ef4444"
+
+  # ── Terminal: Success ────────────────────────────────────────────────
+  - name: finalize_success
+    action: python_example.simulate_work
+    input:
+      duration_seconds: 1.0
+      label: "finalize-success"
+      output_data:
+        status: "success"
+        items_processed: "{{ workflow.items_processed }}"
+        validation: "{{ workflow.validation_passed }}"
+
+  # ── Error path: Handle failure ───────────────────────────────────────
+  - name: handle_failure
+    action: python_example.simulate_work
+    input:
+      duration_seconds: 1.5
+      label: "handle-failure"
+      output_data:
+        status: "handling_error"
+        build: "{{ workflow.build_result }}"
+        lint: "{{ workflow.lint_result }}"
+        scan: "{{ workflow.scan_result }}"
+    next:
+      - when: "{{ succeeded() }}"
+        do:
+          - finalize_failure
+        __chart_meta__:
+          label: "error handled"
+          color: "#f97316"
+
+  # ── Terminal: Failure ────────────────────────────────────────────────
+  - name: finalize_failure
+    action: python_example.simulate_work
+    input:
+      duration_seconds: 0.5
+      label: "finalize-failure"
+      output_data:
+        status: "failed"
+        items_processed: "{{ workflow.items_processed }}"
+        validation: "{{ workflow.validation_passed }}"
+
+output_map:
+  status: "{{ 'success' if workflow.validation_passed else 'failed' }}"
+  items_processed: "{{ workflow.items_processed }}"
+  total_duration: "{{ task.finalize_success.result.duration_seconds if workflow.validation_passed else task.finalize_failure.result.duration_seconds }}"
