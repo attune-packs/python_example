@@ -1,0 +1,34 @@
+# Python Example Pack — Executor
+# Execute any action in the python_example pack and monitor results.
+# Mirrors core.executor but constrains grants to this pack's resources.
+# Cannot modify actions, rules, or keys — use python_example.editor for that.
+
+ref: python_example.executor
+label: "Python Example - Executor"
+description: "Execute any action in the Python Example pack and view the resulting executions and artifacts."
+
+grants:
+  # The pack itself — read only
+  - resource: packs
+    actions: [read]
+    constraints:
+      refs: [python_example]
+
+  # All actions in this pack — read metadata and execute
+  - resource: actions
+    actions: [read, execute]
+    constraints:
+      pack_refs: [python_example]
+
+  # Executions produced by this pack's actions
+  - resource: executions
+    actions: [read]
+    constraints:
+      pack_refs: [python_example]
+
+  # Artifacts produced by this pack's actions — read only
+  - resource: artifacts
+    actions: [read]
+    constraints:
+      owner_types: [pack]
+      owner_refs: [python_example]

@@ -17,7 +17,6 @@ description: >
   durations, with_items fan-out, failure handling paths, publish
   directives, retries, timeouts, and custom edge styling.
 enabled: true
-
 # Reference to the workflow definition file (relative to actions/ directory)
 workflow_file: workflows/timeline_demo.yaml
 
@@ -45,6 +44,10 @@ parameters:
     type: number
     description: "Duration of each with_items work unit in seconds"
     default: 2.0
+  item_failure_probability:
+    type: number
+    description: "Probability of failure for each with_items task (0.0 = never, 1.0 = always)"
+    default: 0.0
   fail_validation:
     type: boolean
     description: "If true, the validate step will intentionally fail to exercise the error path"

@@ -1,0 +1,41 @@
+# Python Example Pack — Viewer
+# Read-only access to the python_example pack.
+# Mirrors core.viewer but constrains grants to this pack's resources.
+
+ref: python_example.viewer
+label: "Python Example - Viewer"
+description: "Read-only access to the Python Example pack's actions, execution history, and artifacts."
+
+grants:
+  # The pack itself — read only
+  - resource: packs
+    actions: [read]
+    constraints:
+      refs: [python_example]
+
+  # All actions in this pack — read metadata only, no execution
+  - resource: actions
+    actions: [read]
+    constraints:
+      pack_refs: [python_example]
+
+  # Executions produced by this pack's actions
+  - resource: executions
+    actions: [read]
+    constraints:
+      pack_refs: [python_example]
+
+  # Artifacts produced by this pack's actions — read only
+  - resource: artifacts
+    actions: [read]
+    constraints:
+      owner_types: [pack]
+      owner_refs: [python_example]
+
+  # Keys owned by this pack — can see they exist and read plaintext values,
+  # but encrypted key values are not revealed (no decrypt grant)
+  - resource: keys
+    actions: [read]
+    constraints:
+      owner_types: [pack]
+      owner_refs: [python_example]

@@ -1,0 +1,56 @@
+# Fulfillment Queue
+# Demonstrates the new pack-local queue definition format.
+# Queue action inputs are now shaped by top-level `action_params` templates
+# instead of `config.input_mapping`.
+
+ref: python_example.fulfillment_queue
+label: "Fulfillment Queue"
+description: "Batches fulfillment-style order items for the Python queue-processing example action."
+enabled: true
+
+dispatch_action: python_example.process_order_queue
+default_priority: 50
+allow_pending_update: true
+update_strategy: merge_patch
+batch_mode: batch
+
+item_schema:
+  order_id:
+    type: integer
+    required: true
+  customer:
+    type: string
+    required: true
+  sku:
+    type: string
+    required: true
+  quantity:
+    type: integer
+    required: true
+  amount:
+    type: number
+    required: true
+  inventory_available:
+    type: boolean
+  retryable:
+    type: boolean
+  requires_manual_review:
+    type: boolean
+
+action_params:
+  # Batch queues receive payloads as `{{ items }}`, metadata-rich queue item
+  # records as `{{ queue_items }}`, and queue metadata via `{{ queue }}`.
+  items: "{{ items }}"
+  queue_items: "{{ queue_items }}"
+  queue: "{{ queue }}"
+
+config:
+  dispatch:
+    concurrency:
+      source: pack_config
+      path: queue_worker_concurrency
+    batch_size:
+      source: pack_config
+      path: queue_batch_size
+  ack_contract:
+    version: 1

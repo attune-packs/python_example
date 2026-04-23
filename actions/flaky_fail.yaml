@@ -28,6 +28,10 @@ parameters:
     type: number
     description: "Probability of failure between 0.0 (never fail) and 1.0 (always fail)"
     default: 0.1
+  sleep_seconds:
+    type: number
+    description: "Duration to sleep in seconds before rolling for failure (0 = no sleep)"
+    default: 0
 
 # Output schema (flat format)
 output_schema:

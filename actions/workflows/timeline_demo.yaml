@@ -188,15 +188,12 @@ tasks:
 
   # ── Stage 4b: Process each item (with_items + concurrency) ──────────
   - name: process_items
-    action: python_example.simulate_work
+    action: python_example.flaky_fail
     with_items: "{{ workflow.number_list }}"
     concurrency: 3
     input:
-      duration_seconds: "{{ parameters.item_duration }}"
-      label: "item-{{ item }}"
-      output_data:
-        item_number: "{{ item }}"
-        index: "{{ index }}"
+      sleep_seconds: "{{ parameters.item_duration }}"
+      failure_probability: "{{ parameters.item_failure_probability }}"
     next:
       - when: "{{ succeeded() }}"
         publish:

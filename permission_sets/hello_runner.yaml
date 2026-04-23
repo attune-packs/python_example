@@ -1,0 +1,21 @@
+# Python Example Pack — Hello Runner
+# The narrowest possible permission set: execute only the Hello Python action
+# and view the resulting executions. No other access is granted.
+
+ref: python_example.hello_runner
+label: "Python Example - Hello Runner"
+description: "Execute the Hello Python action and view its executions. No access to any other action or resource in the pack."
+
+grants:
+  # Only the hello action — scoped by ref, not by pack
+  - resource: actions
+    actions: [read, execute]
+    constraints:
+      refs: [python_example.hello]
+
+  # Executions produced by this pack's actions — scoped to the pack so the
+  # runner can monitor their hello execution without seeing unrelated runs
+  - resource: executions
+    actions: [read]
+    constraints:
+      pack_refs: [python_example]

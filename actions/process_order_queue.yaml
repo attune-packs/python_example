@@ -1,0 +1,68 @@
+# Process Order Queue Action
+# Demonstrates how a Python action handles batched queue items and emits the
+# standard queue_ack contract expected by Attune's work-queue system.
+
+ref: python_example.process_order_queue
+label: "Process Order Queue"
+description: "Processes a batch of fulfillment-style queue items and returns per-item queue_ack outcomes for completed, retry, failed, and skipped items."
+enabled: true
+
+runner_type: python
+runtime_version: ">=3.9"
+entry_point: process_order_queue.py
+
+parameter_delivery: stdin
+parameter_format: json
+
+output_format: json
+
+parameters:
+  items:
+    type: array
+    description: "Queue payloads to process. Each item typically represents an order or fulfillment request."
+    required: true
+  queue_items:
+    type: array
+    description: "Attune queue item metadata aligned with the `items` array, including queue item ids."
+  queue:
+    type: object
+    description: "Queue metadata injected by Attune when dispatching from python_example.fulfillment_queue."
+
+output_schema:
+  queue_ref:
+    type: string
+    description: "Queue ref that dispatched this batch"
+  processed_count:
+    type: integer
+    description: "Total number of queue items handled in this batch"
+    required: true
+  completed_count:
+    type: integer
+    description: "Number of items acknowledged as completed"
+    required: true
+  retry_count:
+    type: integer
+    description: "Number of items acknowledged for retry"
+    required: true
+  failed_count:
+    type: integer
+    description: "Number of items acknowledged as failed"
+    required: true
+  skipped_count:
+    type: integer
+    description: "Number of items acknowledged as skipped"
+    required: true
+  processed_orders:
+    type: array
+    description: "Human-friendly per-item processing summary"
+    required: true
+  queue_ack:
+    type: object
+    description: "Reserved queue acknowledgement structure consumed by the work-queue system"
+    required: true
+
+tags:
+  - python
+  - example
+  - queue
+  - fulfillment

@@ -1,12 +1,14 @@
 # Python Example Pack for Attune
 
-A complete example pack demonstrating Python actions, a stateful counter sensor with keystore integration, and HTTP requests using the `requests` library.
+A complete example pack demonstrating Python actions, a pack-defined work queue, a stateful counter sensor with keystore integration, and HTTP requests using the `requests` library.
 
 ## Purpose
 
 This pack exercises as many parts of the Attune SDLC as possible:
 
 - **Python actions** with the wrapper-based execution model
+- **Pack-defined work queues** in `queues/*.yaml`
+- **Standard `queue_ack` results** for queue item completion / retry / failure / skip handling
 - **Python sensor** with RabbitMQ rule lifecycle integration
 - **Trigger types** with structured payload schemas
 - **Rules** connecting triggers to actions with parameter mapping
@@ -27,12 +29,19 @@ This pack exercises as many parts of the Attune SDLC as possible:
 | `python_example.flaky_fail` | Randomly fails with configurable probability — useful for testing error handling and retry logic |
 | `python_example.simulate_work` | Simulates a unit of work with configurable duration, optional failure, and structured output — useful for testing workflows and the timeline visualizer |
 | `python_example.artifact_demo` | Creates file and progress artifacts via the Attune API, demonstrating the artifact system |
+| `python_example.process_order_queue` | Processes batched fulfillment queue items and emits the standard `queue_ack` result contract |
 
 ### Workflows
 
 | Ref | Description |
 |-----|-------------|
 | `python_example.timeline_demo` | Comprehensive demo workflow exercising parallel fan-out/fan-in, `with_items` concurrency, failure paths, retries, timeouts, publish directives, and custom edge styling — designed to produce a rich Timeline DAG visualization |
+
+### Queues
+
+| Ref | Description |
+|-----|-------------|
+| `python_example.fulfillment_queue` | Batch work queue example defined in `queues/fulfillment_queue.yaml`, dispatched to `python_example.process_order_queue` |
 
 ### Triggers
 
@@ -211,6 +220,77 @@ attune action execute python_example.simulate_work \
 # Exits non-zero with error on stderr
 ```
 
+### Test the queue-processing action directly
+
+This action expects the same shape Attune dispatches for batched queue work:
+
+```bash
+cat <<'EOF' | python3 actions/process_order_queue.py
+{"items":[
+  {"order_id":"ord-1001","customer":"Alice","sku":"SKU-1","quantity":2,"amount":49.99,"inventory_available":true},
+  {"order_id":"ord-1002","customer":"Bob","sku":"SKU-2","quantity":1,"amount":19.99,"inventory_available":false,"retryable":true},
+  {"order_id":"ord-1003","customer":"Carol","sku":"SKU-3","quantity":1,"amount":14.5,"requires_manual_review":true},
+  {"order_id":"ord-1004","customer":"Dave","sku":"SKU-4","quantity":0,"amount":9.0}
+],"queue":{"ref":"python_example.fulfillment_queue","ack_contract_version":1,"items":[
+  {"id":101},{"id":102},{"id":103},{"id":104}
+]}}
+EOF
+```
+
+The result includes a top-level `queue_ack` object like:
+
+```json
+{
+  "queue_ack": {
+    "version": 1,
+    "items": [
+      { "id": 101, "status": "completed", "summary": { "reservation_id": "res-ord-1001" } },
+      { "id": 102, "status": "retry", "error": { "code": "inventory_backorder" } },
+      { "id": 103, "status": "skipped", "summary": { "reason": "manual_review" } },
+      { "id": 104, "status": "failed", "error": { "code": "invalid_quantity" } }
+    ]
+  }
+}
+```
+
+### Exercise the pack-defined fulfillment queue
+
+The queue lives in `queues/fulfillment_queue.yaml` and uses pack config for
+batching:
+
+- `queue_batch_size` → how many queued items dispatch together (default `4`)
+- `queue_worker_concurrency` → how many batches can run in parallel (default `1`)
+
+Enqueue a few items through the API:
+
+```bash
+export ATTUNE_TOKEN=<your-token>
+
+curl -X POST http://localhost:8080/api/v1/queues/python_example.fulfillment_queue/items \
+  -H "Authorization: Bearer ${ATTUNE_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"item_key":"ord-1001","payload":{"order_id":"ord-1001","customer":"Alice","sku":"SKU-1","quantity":2,"amount":49.99,"inventory_available":true}}'
+
+curl -X POST http://localhost:8080/api/v1/queues/python_example.fulfillment_queue/items \
+  -H "Authorization: Bearer ${ATTUNE_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"item_key":"ord-1002","payload":{"order_id":"ord-1002","customer":"Bob","sku":"SKU-2","quantity":1,"amount":19.99,"inventory_available":false,"retryable":true}}'
+
+curl -X POST http://localhost:8080/api/v1/queues/python_example.fulfillment_queue/items \
+  -H "Authorization: Bearer ${ATTUNE_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"item_key":"ord-1003","payload":{"order_id":"ord-1003","customer":"Carol","sku":"SKU-3","quantity":1,"amount":14.5,"requires_manual_review":true}}'
+
+curl -X POST http://localhost:8080/api/v1/queues/python_example.fulfillment_queue/items \
+  -H "Authorization: Bearer ${ATTUNE_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"item_key":"ord-1004","payload":{"order_id":"ord-1004","customer":"Dave","sku":"SKU-4","quantity":0,"amount":9.0}}'
+```
+
+When the executor dispatches the batch, `python_example.process_order_queue`
+returns `queue_ack` and the queue system will mark those four items as
+`completed`, `retry`, `skipped`, and `failed` respectively.
+
 ### Run the Timeline Demo workflow
 
 The `timeline_demo` workflow is designed to produce a visually rich Timeline DAG
@@ -260,6 +340,8 @@ The pack supports the following configuration in `pack.yaml`:
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `counter_key_prefix` | `python_example.counter` | Prefix for keystore keys |
+| `queue_batch_size` | `4` | Default batch size for `python_example.fulfillment_queue` |
+| `queue_worker_concurrency` | `1` | Parallel batch dispatch limit for `python_example.fulfillment_queue` |
 
 The sensor supports these parameters:
 
