@@ -2,8 +2,8 @@
 # Emits incrementing counter events, storing state in the Attune keystore
 #
 # Each subscribing rule gets its own independent counter, keyed by rule ref.
-# The sensor listens for rule lifecycle events via RabbitMQ and manages
-# per-rule timer loops that emit one event per second (configurable).
+# Lifecycle bootstrap and updates are handled by the Attune Python SDK over
+# ATTUNE_SENSOR_TRIGGERS + the notifier WebSocket.
 
 ref: python_example.counter_sensor
 label: "Counter Sensor"
@@ -14,7 +14,7 @@ enabled: true
 runner_type: python
 
 # Minimum Python version required
-runtime_version: ">=3.9"
+runtime_version: ">=3.10"
 
 # Entry point for sensor execution
 entry_point: counter_sensor.py
@@ -57,12 +57,12 @@ meta:
     so that counters survive sensor restarts.
 
     Features exercised:
-    - Python sensor lifecycle (startup, rule subscription, shutdown)
-    - RabbitMQ integration for rule lifecycle events
+    - SDK-managed sensor lifecycle (startup, rule subscription, shutdown)
+    - Notifier WebSocket rule updates plus ATTUNE_SENSOR_TRIGGERS bootstrap
     - Attune keystore API for persistent state (GET/PUT/POST /api/v1/keys)
     - Per-rule scoped state via keystore key naming
-    - Periodic event emission via POST /events API
-    - Graceful shutdown with thread cleanup
+    - Periodic event emission via Sensor.emit()
+    - Graceful shutdown managed by attune.PollingSensor
 
 # Documentation
 examples:

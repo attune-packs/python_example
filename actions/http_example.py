@@ -2,7 +2,7 @@
 """
 HTTP Example Action - Python Example Pack
 
-Demonstrates using the `requests` library to make an HTTP call to example.com.
+Demonstrates using Python's standard library to make an HTTP call to example.com.
 Receives parameters via stdin as JSON.
 """
 

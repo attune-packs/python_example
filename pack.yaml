@@ -3,7 +3,7 @@
 
 ref: python_example
 label: "Python Example Pack"
-description: "Example pack demonstrating Python actions, work queues, a counter sensor with keystore integration, and HTTP requests"
+description: "Example pack demonstrating Python actions, work queues, and an SDK-based counter sensor with keystore integration"
 version: "1.0.0"
 author: "Attune Team"
 email: "support@attune.io"
@@ -13,10 +13,6 @@ enabled: true
 
 # Pack configuration schema (flat format with inline required/secret)
 conf_schema:
-  counter_key_prefix:
-    type: string
-    description: "Prefix for counter keys in the keystore"
-    default: "python_example.counter"
   queue_batch_size:
     type: integer
     description: "Default batch size for the fulfillment queue example"
@@ -28,7 +24,6 @@ conf_schema:
 
 # Default pack configuration
 config:
-  counter_key_prefix: "python_example.counter"
   queue_batch_size: 4
   queue_worker_concurrency: 1
 
@@ -45,8 +40,7 @@ meta:
     - "keystore"
     - "http"
   python_dependencies:
-    - "requests>=2.28.0"
-    - "pika>=1.3.0"
+    - "attune-sdk[sensor]>=0.1.0"
   documentation_url: "https://github.com/attune-automation/pack-python-example"
   repository_url: "https://github.com/attune-automation/pack-python-example"
 

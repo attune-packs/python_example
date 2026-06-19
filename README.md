@@ -1,6 +1,6 @@
 # Python Example Pack for Attune
 
-A complete example pack demonstrating Python actions, a pack-defined work queue, a stateful counter sensor with keystore integration, and HTTP requests using the `requests` library.
+A complete example pack demonstrating Python actions, a pack-defined work queue, and a stateful counter sensor implemented with the Attune Python SDK.
 
 ## Purpose
 
@@ -9,11 +9,11 @@ This pack exercises as many parts of the Attune SDLC as possible:
 - **Python actions** with the wrapper-based execution model
 - **Pack-defined work queues** in `queues/*.yaml`
 - **Standard `queue_ack` results** for queue item completion / retry / failure / skip handling
-- **Python sensor** with RabbitMQ rule lifecycle integration
+- **Python sensor** with SDK-managed notifier WebSocket lifecycle integration
 - **Trigger types** with structured payload schemas
 - **Rules** connecting triggers to actions with parameter mapping
 - **Keystore integration** for persistent sensor state across restarts
-- **External Python dependencies** (`requests`, `pika`)
+- **External Python dependency** (`attune-sdk[sensor]`)
 - **Per-rule scoped state** — each rule subscription gets its own counter
 
 ## Components
@@ -105,8 +105,7 @@ cp -r python_example /opt/attune/packs/python_example
 
 Declared in `requirements.txt`:
 
-- `requests>=2.28.0` — HTTP client for the `http_example` action and sensor API calls
-- `pika>=1.3.0` — RabbitMQ client for the counter sensor
+- `attune-sdk[sensor]>=0.1.0` — sensor runtime, authenticated API client, and notifier WebSocket lifecycle handling
 
 These are installed automatically when the pack is loaded by a Python worker with dependency management enabled.
 
@@ -118,8 +117,8 @@ These are installed automatically when the pack is loaded by a Python worker wit
 ┌──────────────────────────────────────────────────────────┐
 │                   counter_sensor.py                      │
 │                                                          │
-│  1. Startup: fetch active rules from GET /api/v1/rules   │
-│  2. Listen: RabbitMQ queue sensor.python_example.*       │
+│  1. Startup: load ATTUNE_SENSOR_TRIGGERS bootstrap       │
+│  2. Listen: notifier WebSocket lifecycle updates         │
 │     for rule.created / rule.enabled / rule.disabled /    │
 │     rule.deleted messages                                │
 │  3. Per active rule, spawn a timer thread:               │
@@ -130,7 +129,7 @@ These are installed automatically when the pack is loaded by a Python worker wit
 │     │  GET /api/v1/keys/{key} → read counter │           │
 │     │  counter += 1                          │           │
 │     │  PUT /api/v1/keys/{key} → write back   │           │
-│     │  POST /api/v1/events → emit event      │           │
+│     │  Sensor.emit(...) → emit event         │           │
 │     └────────────────────────────────────────┘           │
 │                                                          │
 │  4. On shutdown: stop all timer threads gracefully       │
@@ -170,8 +169,8 @@ The included `count_and_log` rule maps trigger payload fields to action paramete
 
 ```yaml
 action_params:
-  counter: "{{ trigger.payload.counter }}"
-  rule_ref: "{{ trigger.payload.rule_ref }}"
+  counter: "{{ event.payload.counter }}"
+  rule_ref: "{{ event.payload.rule_ref }}"
 ```
 
 The `read_counter` action then returns:
@@ -339,7 +338,6 @@ The pack supports the following configuration in `pack.yaml`:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `counter_key_prefix` | `python_example.counter` | Prefix for keystore keys |
 | `queue_batch_size` | `4` | Default batch size for `python_example.fulfillment_queue` |
 | `queue_worker_concurrency` | `1` | Parallel batch dispatch limit for `python_example.fulfillment_queue` |
 
@@ -362,7 +360,10 @@ The trigger supports per-rule configuration:
 # Run the sensor manually for testing
 export ATTUNE_API_URL=http://localhost:8080
 export ATTUNE_API_TOKEN=<your-token>
-export ATTUNE_MQ_URL=amqp://guest:guest@localhost:5672/
+export ATTUNE_SENSOR_REF=python_example.counter_sensor
+export ATTUNE_SENSOR_ID=1
+export ATTUNE_NOTIFIER_WS_URL=ws://localhost:8081/ws
+export ATTUNE_SENSOR_TRIGGERS='[]'
 python3 sensors/counter_sensor.py
 
 # Run an action manually

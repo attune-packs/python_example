@@ -1,9 +1,9 @@
 # HTTP Example Action
-# Demonstrates using the requests library to make HTTP calls
+# Demonstrates using Python's standard library to make HTTP calls
 
 ref: python_example.http_example
 label: "HTTP Example"
-description: "Makes an HTTP GET request to example.com using the requests library"
+description: "Makes an HTTP GET request to example.com using Python's standard library"
 enabled: true
 
 # Runner type
@@ -67,4 +67,4 @@ tags:
   - http
   - python
   - example
-  - requests
+  - urllib
