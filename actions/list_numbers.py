@@ -4,23 +4,14 @@ List Numbers Action - Python Example Pack
 
 Returns a list of sequential integers as JSON.
 Result format: {"items": [start, start+1, ..., start+n-1]}
-
-Actions receive parameters as JSON on stdin and write results to stdout.
 """
 
-import json
-import sys
+import attune
 
 
-def main():
-    # Read parameters from stdin (JSON format)
-    params = json.loads(sys.stdin.readline())
-    n = int(params.get("n", 10))
-    start = int(params.get("start", 0))
-
-    result = {"items": list(range(start, n + start))}
-    print(json.dumps(result))
+def main(n: int = 10, start: int = 0):
+    return {"items": list(range(start, n + start))}
 
 
 if __name__ == "__main__":
-    main()
+    attune.run_action(main)

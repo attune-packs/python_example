@@ -17,13 +17,7 @@ Each item can drive a different acknowledgement outcome:
   - skipped: intentionally deferred for manual review
 """
 
-import json
-import sys
-
-
-def read_params():
-    raw = sys.stdin.read()
-    return json.loads(raw or "{}")
+import attune
 
 
 def as_bool(value):
@@ -117,11 +111,8 @@ def classify_order(order):
     )
 
 
-def main():
-    params = read_params()
-    items = params.get("items")
-    queue_items = params.get("queue_items")
-    queue = params.get("queue") or {}
+def main(items, queue_items=None, queue=None):
+    queue = queue or {}
 
     if not isinstance(items, list) or not items:
         raise ValueError("Expected a non-empty 'items' array")
@@ -167,7 +158,7 @@ def main():
             }
         )
 
-    result = {
+    return {
         "queue_ref": queue_ref,
         "processed_count": len(items),
         "completed_count": counts["completed"],
@@ -181,8 +172,6 @@ def main():
         },
     }
 
-    print(json.dumps(result))
-
 
 if __name__ == "__main__":
-    main()
+    attune.run_action(main)

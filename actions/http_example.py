@@ -3,18 +3,15 @@
 HTTP Example Action - Python Example Pack
 
 Demonstrates using Python's standard library to make an HTTP call to example.com.
-Receives parameters via stdin as JSON.
+Bootstraps parameters/output via attune.run_action.
 """
 
-import json
-import sys
 import urllib.request
 
+import attune
 
-def main():
-    # Read parameters from stdin (JSON format)
-    params = json.loads(sys.stdin.readline())
-    url = params.get("url", "https://example.com")
+
+def main(url: str = "https://example.com"):
 
     req = urllib.request.Request(url)
     with urllib.request.urlopen(req, timeout=10) as response:
@@ -29,8 +26,8 @@ def main():
         "snippet": text[:500],
         "success": 200 <= status_code < 400,
     }
-    print(json.dumps(result))
+    return result
 
 
 if __name__ == "__main__":
-    main()
+    attune.run_action(main)

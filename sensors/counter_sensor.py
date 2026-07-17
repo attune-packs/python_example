@@ -16,8 +16,9 @@ import threading
 from datetime import datetime, timezone
 from typing import Any
 
-import attune
 import httpx
+
+import attune
 
 
 class CounterSensor(attune.PollingSensor):
@@ -28,6 +29,8 @@ class CounterSensor(attune.PollingSensor):
         self.key_prefix = config.get("key_prefix", "python_example.counter")
         self._rule_locks: dict[int, threading.Lock] = {}
         self._rule_locks_guard = threading.Lock()
+        self._fatal_error: str | None = None
+        self._fatal_error_guard = threading.Lock()
         try:
             self.interval = float(config.get("default_interval_seconds", "1"))
         except ValueError:
@@ -42,22 +45,26 @@ class CounterSensor(attune.PollingSensor):
             },
         )
 
+    def run(self) -> None:
+        while not self.is_shutting_down:
+            fatal = self._fatal_error_message()
+            if fatal:
+                raise RuntimeError(fatal)
+            self._shutdown_event.wait(timeout=1)
+
+        fatal = self._fatal_error_message()
+        if fatal:
+            raise RuntimeError(fatal)
+
     def poll(self, rule: attune.RuleState) -> None:
         with self._rule_lock(rule.rule_id):
             key_ref = self._key_ref(rule)
             current_value = self._read_counter(key_ref)
-            next_value = current_value + 1
+            if self._fatal_error_message() is not None:
+                return
 
-            event_id = self.emit(
-                {
-                    "counter": next_value,
-                    "rule_ref": rule.rule_ref,
-                    "sensor_ref": attune.sensor_context.sensor_ref,
-                    "fired_at": datetime.now(timezone.utc).isoformat(),
-                },
-                rule=rule,
-                target_rule=True,
-            )
+            next_value = current_value + 1
+            event_id = self._emit_counter_event(rule, next_value)
             if event_id is None:
                 self.logger.warning(
                     "Counter event emission failed; skipping counter advance",
@@ -71,6 +78,8 @@ class CounterSensor(attune.PollingSensor):
                 return
 
             self._write_counter(key_ref, next_value)
+            if self._fatal_error_message() is not None:
+                return
 
             self.logger.info(
                 "Counter emitted",
@@ -134,7 +143,9 @@ class CounterSensor(attune.PollingSensor):
 
     def _read_counter(self, key_ref: str) -> int:
         try:
-            response = self.http_client.get(f"/api/v1/keys/{key_ref}")
+            response = self._request_with_auth_retry("GET", f"/api/v1/keys/{key_ref}")
+            if response is None:
+                return 0
             if response.status_code == 404:
                 return 0
             response.raise_for_status()
@@ -151,7 +162,11 @@ class CounterSensor(attune.PollingSensor):
     def _write_counter(self, key_ref: str, value: int) -> None:
         body = {"value": value, "name": f"Counter: {key_ref}"}
         try:
-            response = self.http_client.put(f"/api/v1/keys/{key_ref}", json=body)
+            response = self._request_with_auth_retry(
+                "PUT", f"/api/v1/keys/{key_ref}", json=body
+            )
+            if response is None:
+                return
             if response.status_code in (200, 201):
                 return
             if response.status_code != 404:
@@ -168,13 +183,81 @@ class CounterSensor(attune.PollingSensor):
             "value": value,
             "encrypted": False,
         }
-        response = self.http_client.post("/api/v1/keys", json=create_body)
+        response = self._request_with_auth_retry(
+            "POST", "/api/v1/keys", json=create_body
+        )
+        if response is None:
+            return
         if response.status_code in (200, 201, 409):
             if response.status_code == 409:
-                retry = self.http_client.put(f"/api/v1/keys/{key_ref}", json=body)
+                retry = self._request_with_auth_retry(
+                    "PUT", f"/api/v1/keys/{key_ref}", json=body
+                )
+                if retry is None:
+                    return
                 retry.raise_for_status()
             return
         response.raise_for_status()
+
+    def _emit_counter_event(self, rule: attune.RuleState, counter: int) -> int | None:
+        body = {
+            "trigger_ref": rule.trigger_ref or attune.sensor_context.sensor_ref,
+            "payload": {
+                "counter": counter,
+                "rule_ref": rule.rule_ref,
+                "sensor_ref": attune.sensor_context.sensor_ref,
+                "fired_at": datetime.now(timezone.utc).isoformat(),
+            },
+            "source": attune.sensor_context.sensor_ref,
+            "trigger_instance_id": f"rule_{rule.rule_id}",
+        }
+
+        try:
+            response = self._request_with_auth_retry(
+                "POST", "/api/v1/events", json=body
+            )
+            if response is None:
+                return None
+            response.raise_for_status()
+            return response.json().get("data", {}).get("id")
+        except httpx.HTTPError as exc:
+            self.logger.error("Failed to emit event: %s", exc)
+            return None
+
+    def _request_with_auth_retry(
+        self, method: str, path: str, **kwargs: Any
+    ) -> httpx.Response | None:
+        response = self.http_client.request(method, path, **kwargs)
+        if response.status_code != 401:
+            return response
+
+        self.logger.warning(
+            "Sensor API request unauthorized; rebuilding client and retrying once",
+            extra={"method": method, "path": path},
+        )
+        self._rebuild_http_client()
+        retry = self.http_client.request(method, path, **kwargs)
+        if retry.status_code == 401:
+            self._mark_fatal_auth_failure(method, path)
+            return None
+        return retry
+
+    def _mark_fatal_auth_failure(self, method: str, path: str) -> None:
+        reason = (
+            f"Unrecoverable sensor auth failure ({method} {path}); "
+            "requesting process restart"
+        )
+        with self._fatal_error_guard:
+            if self._fatal_error is not None:
+                return
+            self._fatal_error = reason
+
+        self.logger.error(reason)
+        self.shutdown()
+
+    def _fatal_error_message(self) -> str | None:
+        with self._fatal_error_guard:
+            return self._fatal_error
 
 
 if __name__ == "__main__":

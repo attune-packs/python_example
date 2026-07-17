@@ -7,7 +7,7 @@ Returns structured JSON output with timing information and an optional
 payload. Useful for testing workflows, the timeline DAG visualizer,
 and execution monitoring.
 
-Parameters (via stdin JSON):
+Parameters:
   duration_seconds  - How long to simulate work (float, default: 1.0)
   label             - A label for this work unit (string, default: "work")
   fail              - Whether to simulate a failure (bool, default: false)
@@ -22,19 +22,19 @@ Output (JSON):
   success           - Always true on success (failures exit non-zero)
 """
 
-import json
-import sys
 import time
+import sys
+
+import attune
 
 
-def main():
-    params = json.loads(sys.stdin.readline())
-
-    duration_seconds = float(params.get("duration_seconds", 1.0))
-    label = params.get("label", "work")
-    fail = params.get("fail", False)
-    fail_after = float(params.get("fail_after", 0))
-    output_data = params.get("output_data", None)
+def main(
+    duration_seconds: float = 1.0,
+    label: str = "work",
+    fail: bool = False,
+    fail_after: float = 0,
+    output_data=None,
+):
 
     # Clamp duration to a reasonable range
     duration_seconds = max(0.0, min(duration_seconds, 300.0))
@@ -49,30 +49,13 @@ def main():
         # Sleep for fail_after seconds then crash
         time.sleep(min(fail_after, duration_seconds))
         elapsed = round(time.time() - start, 3)
-        print(
-            json.dumps(
-                {
-                    "error": f"Simulated failure in '{label}' after {elapsed}s",
-                    "label": label,
-                    "elapsed": elapsed,
-                }
-            ),
-            file=sys.stderr,
+        raise RuntimeError(
+            f"Simulated failure in '{label}' after {elapsed}s (elapsed={elapsed})"
         )
-        sys.exit(1)
 
     if fail:
         # Immediate failure
-        print(
-            json.dumps(
-                {
-                    "error": f"Simulated immediate failure in '{label}'",
-                    "label": label,
-                }
-            ),
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        raise RuntimeError(f"Simulated immediate failure in '{label}'")
 
     # Simulate work with periodic progress to stderr
     remaining = duration_seconds
@@ -97,9 +80,9 @@ def main():
     if output_data is not None:
         result["output_data"] = output_data
 
-    print(json.dumps(result))
     print(f"[simulate_work] '{label}' completed in {elapsed}s", file=sys.stderr)
+    return result
 
 
 if __name__ == "__main__":
-    main()
+    attune.run_action(main)

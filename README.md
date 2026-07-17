@@ -6,7 +6,7 @@ A complete example pack demonstrating Python actions, a pack-defined work queue,
 
 This pack exercises as many parts of the Attune SDLC as possible:
 
-- **Python actions** with the wrapper-based execution model
+- **Python actions** using `attune.run_action` for parameter parsing and JSON output
 - **Pack-defined work queues** in `queues/*.yaml`
 - **Standard `queue_ack` results** for queue item completion / retry / failure / skip handling
 - **Python sensor** with SDK-managed notifier WebSocket lifecycle integration
@@ -367,7 +367,7 @@ export ATTUNE_SENSOR_TRIGGERS='[]'
 python3 sensors/counter_sensor.py
 
 # Run an action manually
-echo '{"parameters": {"name": "World"}}' | python3 actions/hello.py
+echo '{"name": "World"}' | python3 actions/hello.py
 ```
 
 ## License

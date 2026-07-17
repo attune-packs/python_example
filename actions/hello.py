@@ -3,23 +3,15 @@
 Hello Action - Python Example Pack
 
 A minimal Python action that returns "Hello, Python".
-Demonstrates the basic structure of a self-contained action in Attune.
-
-Actions receive parameters as JSON on stdin and write results to stdout.
+Demonstrates SDK-based action bootstrapping with attune.run_action.
 """
 
-import json
-import sys
+import attune
 
 
-def main():
-    # Read parameters from stdin (JSON format)
-    params = json.loads(sys.stdin.readline())
-    name = params.get("name", "Python")
-
-    result = {"message": f"Hello, {name}"}
-    print(json.dumps(result))
+def main(name: str = "Python"):
+    return {"message": f"Hello, {name}"}
 
 
 if __name__ == "__main__":
-    main()
+    attune.run_action(main)
