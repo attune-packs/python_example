@@ -21,5 +21,6 @@ action_params:
 # No conditions — fire on every counter event
 conditions: {}
 
-# Active by default
-enabled: true
+# Opt in explicitly. At the one-second sensor default this rule creates 86,400
+# executions per day and can exhaust artifact storage in a development cluster.
+enabled: false

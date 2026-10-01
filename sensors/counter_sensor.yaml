@@ -31,11 +31,6 @@ parameters:
     default: 1
     minimum: 1
     maximum: 3600
-  key_prefix:
-    type: string
-    description: "Prefix for counter keys in the Attune keystore"
-    default: "python_example.counter"
-
 # Poll interval (how often the sensor checks for events)
 poll_interval: 1
 
@@ -59,7 +54,7 @@ meta:
     Features exercised:
     - SDK-managed sensor lifecycle (startup, rule subscription, shutdown)
     - Notifier WebSocket rule updates plus ATTUNE_SENSOR_TRIGGERS bootstrap
-    - Attune keystore API for persistent state (GET/PUT/POST /api/v1/keys)
+    - Attune keystore API for persistent state (canonical refs for GET/PUT, local_ref for POST)
     - Per-rule scoped state via keystore key naming
     - Periodic event emission via Sensor.emit()
     - Graceful shutdown managed by attune.PollingSensor

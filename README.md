@@ -126,9 +126,9 @@ These are installed automatically when the pack is loaded by a Python worker wit
 │     ┌────────────────────────────────────────┐           │
 │     │  Timer Thread (1 tick/sec per rule)     │           │
 │     │                                        │           │
-│     │  GET /api/v1/keys/{key} → read counter │           │
+│     │  GET /api/v1/keys/{canonical_ref}       │           │
 │     │  counter += 1                          │           │
-│     │  PUT /api/v1/keys/{key} → write back   │           │
+│     │  PUT /api/v1/keys/{canonical_ref}       │           │
 │     │  Sensor.emit(...) → emit event         │           │
 │     └────────────────────────────────────────┘           │
 │                                                          │
@@ -141,13 +141,13 @@ These are installed automatically when the pack is loaded by a Python worker wit
 Each rule gets its own counter key:
 
 ```
-python_example.counter.<rule_ref_with_dots_replaced_by_underscores>
+sensor.python_example.counter_sensor.counter_<24-character-rule-ref-hash>
 ```
 
 For example, a rule with ref `python_example.count_and_log` stores its counter at:
 
 ```
-python_example.counter.python_example_count_and_log
+sensor.python_example.counter_sensor.counter_0123456789abcdef01234567
 ```
 
 ### Event Payload
@@ -346,7 +346,6 @@ The sensor supports these parameters:
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `default_interval_seconds` | `1` | Default tick interval per rule |
-| `key_prefix` | `python_example.counter` | Keystore key prefix |
 
 The trigger supports per-rule configuration:
 

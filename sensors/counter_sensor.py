@@ -13,6 +13,7 @@ This sensor demonstrates the current managed-sensor model:
 from __future__ import annotations
 
 import threading
+from hashlib import sha256
 from datetime import datetime, timezone
 from typing import Any
 
@@ -26,7 +27,6 @@ class CounterSensor(attune.PollingSensor):
 
     def setup(self) -> None:
         config = attune.sensor_context.config
-        self.key_prefix = config.get("key_prefix", "python_example.counter")
         self._rule_locks: dict[int, threading.Lock] = {}
         self._rule_locks_guard = threading.Lock()
         self._fatal_error: str | None = None
@@ -40,7 +40,6 @@ class CounterSensor(attune.PollingSensor):
             "Counter sensor configured",
             extra={
                 "default_interval_seconds": self.interval,
-                "key_prefix": self.key_prefix,
                 "sensor_ref": attune.sensor_context.sensor_ref,
             },
         )
@@ -135,7 +134,9 @@ class CounterSensor(attune.PollingSensor):
         )
 
     def _key_ref(self, rule: attune.RuleState) -> str:
-        return f"{self.key_prefix}.{rule.rule_ref.replace('.', '_')}"
+        rule_digest = sha256(rule.rule_ref.encode("utf-8")).hexdigest()[:24]
+        local_ref = f"counter_{rule_digest}"
+        return f"sensor.{attune.sensor_context.sensor_ref}.{local_ref}"
 
     def _rule_lock(self, rule_id: int) -> threading.Lock:
         with self._rule_locks_guard:
@@ -175,8 +176,10 @@ class CounterSensor(attune.PollingSensor):
             if exc.response.status_code != 404:
                 raise
 
+        owner_prefix = f"sensor.{attune.sensor_context.sensor_ref}."
+        local_ref = key_ref.removeprefix(owner_prefix)
         create_body = {
-            "ref": key_ref,
+            "local_ref": local_ref,
             "owner_type": "sensor",
             "owner_sensor_ref": attune.sensor_context.sensor_ref,
             "name": f"Counter: {key_ref}",
